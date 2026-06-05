@@ -1,54 +1,76 @@
 import os
 import json
-import re
 
-# ─────────────────────────────────────────────────────────────
-# CONFIGURATION — edit this to add new problems
-# ─────────────────────────────────────────────────────────────
-PROBLEMS = [
-    {"id": 1,   "name": "Two Sum",                          "diff": "Easy",   "topics": ["arrays", "hash-map"]},
-    {"id": 15,  "name": "3Sum",                             "diff": "Medium", "topics": ["arrays", "two-pointers"]},
-    {"id": 42,  "name": "Trapping Rain Water",              "diff": "Hard",   "topics": ["two-pointers", "stack"]},
-    {"id": 121, "name": "Best Time to Buy and Sell Stock",  "diff": "Easy",   "topics": ["arrays", "sliding-window"]},
-    {"id": 3,   "name": "Longest Substring Without Repeating", "diff": "Medium", "topics": ["sliding-window", "hash-map"]},
-    {"id": 102, "name": "Binary Tree Level Order Traversal","diff": "Medium", "topics": ["trees", "bfs"]},
-    {"id": 206, "name": "Reverse Linked List",              "diff": "Easy",   "topics": ["linked-lists"]},
-    {"id": 70,  "name": "Climbing Stairs",                  "diff": "Easy",   "topics": ["dynamic-programming"]},
-    {"id": 322, "name": "Coin Change",                      "diff": "Medium", "topics": ["dynamic-programming"]},
-    {"id": 33,  "name": "Search in Rotated Sorted Array",   "diff": "Medium", "topics": ["binary-search", "arrays"]},
-]
-
-LANG_FILES = {
-    "py":   "solution.py",
-    "java": "solution.java",
-    "cs":   "solution.cs",
-    "cpp":  "solution.cpp",
-}
-
-BASE_DIR   = "leetcode-problems"
+BASE_DIR   = "."
 INDEX_FILE = "index.html"
 
-# ─────────────────────────────────────────────────────────────
+LANG_EXTENSIONS = {
+    "py":   ".py",
+    "java": ".java",
+    "cs":   ".cs",
+    "cpp":  ".cpp",
+}
 
-def folder_name(problem):
-    slug = problem["name"].lower()
-    slug = re.sub(r"[^a-z0-9]+", "-", slug).strip("-")
-    return f"{problem['id']:03d}_{slug}"
-
-def scan_problem(problem):
-    folder = os.path.join(BASE_DIR, folder_name(problem))
+def find_lang_files(folder_path):
+    """Scan folder and find any file matching each language extension."""
+    files_in_folder = os.listdir(folder_path)
     langs = {}
-    for key, filename in LANG_FILES.items():
-        path = os.path.join(folder, filename)
-        langs[key] = path.replace("\\", "/") if os.path.exists(path) else None
+    for key, ext in LANG_EXTENSIONS.items():
+        match = next((f for f in files_in_folder if f.endswith(ext)), None)
+        if match:
+            langs[key] = os.path.join(folder_path, match).replace("\\", "/")
+        else:
+            langs[key] = None
+    return langs
 
-    pdf_path = os.path.join(folder, "notes.pdf")
-    pdf = pdf_path.replace("\\", "/") if os.path.exists(pdf_path) else None
+def find_pdf(folder_path):
+    """Find any .pdf file in the folder."""
+    files_in_folder = os.listdir(folder_path)
+    match = next((f for f in files_in_folder if f.endswith(".pdf")), None)
+    if match:
+        return os.path.join(folder_path, match).replace("\\", "/")
+    return None
 
-    any_done = any(v is not None for v in langs.values()) or pdf is not None
-    status = "Done" if any_done else "Todo"
+def scan_all_problems():
+    problems = []
+    if not os.path.exists(BASE_DIR):
+        print(f"Folder '{BASE_DIR}' not found. Make sure you run this from your repo root.")
+        return problems
 
-    return {**problem, "langs": langs, "pdf": pdf, "status": status}
+    for folder in sorted(os.listdir(BASE_DIR)):
+        folder_path = os.path.join(BASE_DIR, folder)
+        if not os.path.isdir(folder_path):
+            continue
+
+        info_path = os.path.join(folder_path, "info.json")
+        if not os.path.exists(info_path):
+            print(f"  Skipping {folder}/ — no info.json found")
+            continue
+
+        with open(info_path, "r", encoding="utf-8") as f:
+            info = json.load(f)
+
+        langs = find_lang_files(folder_path)
+        pdf   = find_pdf(folder_path)
+
+        any_done = any(v is not None for v in langs.values()) or pdf is not None
+        status = "Done" if any_done else "Todo"
+
+        problems.append({
+            "id":     info.get("id"),
+            "name":   info.get("name"),
+            "diff":   info.get("difficulty"),
+            "topics": info.get("topics", []),
+            "langs":  langs,
+            "pdf":    pdf,
+            "status": status,
+        })
+
+        langs_done = sum(1 for v in langs.values() if v)
+        print(f"  [{status:4s}] #{info.get('id'):4d} {info.get('name')} — {langs_done}/4 languages, PDF: {'yes' if pdf else 'no'}")
+
+    return problems
+
 
 def build_html(problems_data):
     return f"""<!DOCTYPE html>
@@ -63,10 +85,12 @@ def build_html(problems_data):
     body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f9f9f7; color: #1a1a1a; padding: 2rem; }}
     h1 {{ font-size: 22px; font-weight: 500; margin-bottom: 4px; }}
     .subtitle {{ font-size: 13px; color: #888; margin-bottom: 1.5rem; }}
-    .stats {{ display: flex; gap: 10px; margin-bottom: 1.5rem; flex-wrap: wrap; }}
+    .stats {{ display: flex; gap: 10px; margin-bottom: 1rem; flex-wrap: wrap; }}
     .stat {{ background: #fff; border: 0.5px solid #e0dfd8; border-radius: 8px; padding: 10px 18px; text-align: center; min-width: 80px; }}
     .stat-num {{ font-size: 22px; font-weight: 500; }}
     .stat-label {{ font-size: 11px; color: #888; margin-top: 2px; }}
+    .progress-bar {{ height: 4px; background: #f0efe8; border-radius: 2px; margin-bottom: 1.5rem; }}
+    .progress-fill {{ height: 100%; background: #0F6E56; border-radius: 2px; transition: width .3s; }}
     .filters {{ display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 1.5rem; }}
     .filter-group {{ display: flex; flex-direction: column; gap: 4px; }}
     .filter-group label {{ font-size: 12px; color: #888; }}
@@ -98,13 +122,13 @@ def build_html(problems_data):
     .pdf-link:hover {{ background: #F5C4B3; }}
     .no-results {{ text-align: center; padding: 3rem; color: #888; font-size: 14px; }}
     .num {{ color: #aaa; font-size: 12px; }}
-    .progress-bar {{ height: 4px; background: #f0efe8; border-radius: 2px; margin-bottom: 1.5rem; overflow: hidden; }}
-    .progress-fill {{ height: 100%; background: #0F6E56; border-radius: 2px; transition: width .3s; }}
+    .empty-state {{ text-align: center; padding: 4rem 2rem; color: #aaa; }}
+    .empty-state p {{ font-size: 14px; margin-top: 8px; }}
   </style>
 </head>
 <body>
   <h1>LeetCode Tracker</h1>
-  <p class="subtitle">Auto-generated by update.py — run it before pushing to keep this file in sync.</p>
+  <p class="subtitle">Auto-generated by update.py &mdash; run it before pushing to keep this in sync.</p>
 
   <div class="stats" id="stats"></div>
   <div class="progress-bar"><div class="progress-fill" id="progress"></div></div>
@@ -123,9 +147,7 @@ def build_html(problems_data):
     </div>
     <div class="filter-group">
       <label>Topic</label>
-      <select id="topic" onchange="render()">
-        <option value="">All topics</option>
-      </select>
+      <select id="topic" onchange="render()"><option value="">All topics</option></select>
     </div>
     <div class="filter-group">
       <label>Status</label>
@@ -157,6 +179,10 @@ def build_html(problems_data):
       <tbody id="tbody"></tbody>
     </table>
     <div id="no-results" class="no-results" style="display:none">No problems match your filters.</div>
+    <div id="empty-state" class="empty-state" style="display:none">
+      <b>No problems yet.</b>
+      <p>Create a folder inside <code>Leetcode/</code> with an <code>info.json</code>, then run <code>python update.py</code>.</p>
+    </div>
   </div>
 
   <script>
@@ -170,11 +196,15 @@ def build_html(problems_data):
     }};
 
     const allTopics = [...new Set(problems.flatMap(p => p.topics))].sort();
-    const sel = document.getElementById("topic");
+    const topicSel = document.getElementById("topic");
     allTopics.forEach(t => {{
       const o = document.createElement("option");
-      o.value = t; o.textContent = t; sel.appendChild(o);
+      o.value = t; o.textContent = t; topicSel.appendChild(o);
     }});
+
+    if (problems.length === 0) {{
+      document.getElementById("empty-state").style.display = "block";
+    }}
 
     function langBadges(langs) {{
       return Object.entries(langMeta).map(([key, meta]) => {{
@@ -208,18 +238,19 @@ def build_html(problems_data):
           <td><div class="lang-links">${{langBadges(p.langs)}}</div></td>
           <td>${{p.pdf
             ? `<a class="pdf-link" href="${{p.pdf}}"><i class="ti ti-file" aria-hidden="true"></i>PDF</a>`
-            : `<span style="color:#ccc">—</span>`
-          }}</td>
+            : `<span style="color:#ccc">—</span>`}}</td>
           <td><span class="badge ${{p.status.toLowerCase()}}">${{p.status}}</span></td>
         </tr>
       `).join("");
 
-      document.getElementById("no-results").style.display = filtered.length ? "none" : "block";
+      document.getElementById("no-results").style.display =
+        (filtered.length === 0 && problems.length > 0) ? "block" : "none";
 
       const done  = problems.filter(p => p.status === "Done").length;
       const total = problems.length;
       const withPdf = problems.filter(p => p.pdf).length;
-      document.getElementById("progress").style.width = Math.round(done / total * 100) + "%";
+      document.getElementById("progress").style.width =
+        total > 0 ? Math.round(done / total * 100) + "%" : "0%";
       document.getElementById("stats").innerHTML = `
         <div class="stat"><div class="stat-num">${{total}}</div><div class="stat-label">Total</div></div>
         <div class="stat"><div class="stat-num" style="color:#0F6E56">${{done}}</div><div class="stat-label">Done</div></div>
@@ -233,23 +264,21 @@ def build_html(problems_data):
 </body>
 </html>"""
 
-def main():
-    print("Scanning folders...")
-    results = []
-    for p in PROBLEMS:
-        data = scan_problem(p)
-        langs_done = sum(1 for v in data["langs"].values() if v)
-        print(f"  [{data['status']:4s}] #{p['id']:4d} {p['name']} — {langs_done}/4 languages, PDF: {'yes' if data['pdf'] else 'no'}")
-        results.append(data)
 
-    html = build_html(results)
+def main():
+    print(f"Scanning {BASE_DIR}/...")
+    problems = scan_all_problems()
+
+    html = build_html(problems)
     with open(INDEX_FILE, "w", encoding="utf-8") as f:
         f.write(html)
 
-    done  = sum(1 for r in results if r["status"] == "Done")
-    total = len(results)
+    done  = sum(1 for p in problems if p["status"] == "Done")
+    total = len(problems)
     print(f"\nDone! {done}/{total} problems completed.")
-    print(f"index.html updated — now run: git add . && git commit -m 'Update tracker' && git push origin main")
+    print(f"index.html updated.")
+    print(f"\nNext: git add . && git commit -m 'Update tracker' && git push origin main")
+
 
 if __name__ == "__main__":
     main()

@@ -1,0 +1,6 @@
+{
+  "id": 1,
+  "name": "Two Sum",
+  "difficulty": "Easy",
+  "topics": ["arrays", "hash-map"]
+}
